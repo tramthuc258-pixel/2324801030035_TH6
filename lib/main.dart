@@ -1,122 +1,268 @@
+import 'dart:async';
+
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import 'models/song_model.dart';
+import 'screens/home_screen.dart';
+import 'services/audio_service.dart';
+import 'services/firebase_service.dart';
+import 'services/playlist_service.dart';
+import 'services/theme_service.dart';
+import 'theme/music_theme.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+typedef ReadyAppBuilder = Widget Function(
+  BuildContext context,
+  List<SongModel> songs,
+  Future<void> Function() onRefresh,
+);
 
-  // This widget is the root of your application.
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
-    );
-  }
-}
+class MyApp extends StatefulWidget {
+  const MyApp({
+    super.key,
+    this.initializeFirebase = initializeFirebaseApp,
+    this.loadSongs = loadSongsFromFirestore,
+    this.readyBuilder,
+    this.themeController,
+  });
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+  final FirebaseInitializer initializeFirebase;
+  final SongLoader loadSongs;
+  final ReadyAppBuilder? readyBuilder;
+  final ThemeController? themeController;
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<MyApp> createState() => _MyAppState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _MyAppState extends State<MyApp> {
+  late final ThemeController _theme;
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+  @override
+  void initState() {
+    super.initState();
+    _theme = widget.themeController ?? ThemeController();
+    unawaited(_theme.load());
   }
 
   @override
-  Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
-          children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
+  void dispose() {
+    if (widget.themeController == null) _theme.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => MusicThemeScope(
+    controller: _theme,
+    child: AnimatedBuilder(
+      animation: _theme,
+      builder: (context, _) => MaterialApp(
+        title: 'DYN MUSIC',
+        debugShowCheckedModeBanner: false,
+        theme: buildMusicTheme(brightness: Brightness.light),
+        darkTheme: buildMusicTheme(),
+        themeMode: _theme.mode,
+        builder: (context, child) {
+          final dark = Theme.of(context).brightness == Brightness.dark;
+          return AnnotatedRegion<SystemUiOverlayStyle>(
+            value:
+                (dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark)
+                    .copyWith(
+                      statusBarColor: Colors.transparent,
+                      systemNavigationBarColor: MusicPalette.of(context)
+                          .surface,
+                    ),
+            child: child!,
+          );
+        },
+        home: _MusicBootstrap(
+          initializeFirebase: widget.initializeFirebase,
+          loadSongs: widget.loadSongs,
+          readyBuilder: widget.readyBuilder,
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
+    ),
+  );
+}
+
+class _MusicBootstrap extends StatefulWidget {
+  const _MusicBootstrap({
+    required this.initializeFirebase,
+    required this.loadSongs,
+    this.readyBuilder,
+  });
+
+  final FirebaseInitializer initializeFirebase;
+  final SongLoader loadSongs;
+  final ReadyAppBuilder? readyBuilder;
+
+  @override
+  State<_MusicBootstrap> createState() => _MusicBootstrapState();
+}
+
+class _MusicBootstrapState extends State<_MusicBootstrap> {
+  bool _firebaseReady = false;
+  bool _loading = true;
+  List<SongModel>? _songs;
+  String? _error;
+  Future<void>? _refreshInFlight;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_start());
+  }
+
+  Future<void> _start() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      if (!_firebaseReady) {
+        await widget.initializeFirebase();
+        _firebaseReady = true;
+      }
+      final songs = await widget.loadSongs();
+      if (!mounted) return;
+      setState(() {
+        _songs = songs;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = _failureMessage(error);
+      });
+    }
+  }
+
+  Future<void> _refresh() => _refreshInFlight ??= _reload().whenComplete(() {
+    _refreshInFlight = null;
+  });
+
+  Future<void> _reload() async {
+    try {
+      final songs = await widget.loadSongs();
+      if (mounted) setState(() => _songs = songs);
+    } catch (error) {
+      throw Exception(_failureMessage(error));
+    }
+  }
+
+  String _failureMessage(Object error) {
+    if (error is UnsupportedError) {
+      return 'Hãy chạy ứng dụng trên điện thoại hoặc máy ảo Android.';
+    }
+    if (!_firebaseReady) {
+      return 'Chưa kết nối được dịch vụ. Kiểm tra Internet rồi thử lại.';
+    }
+    if (error is TimeoutException ||
+        error is FirebaseException &&
+            ['unavailable', 'deadline-exceeded'].contains(error.code)) {
+      return 'Kết nối quá thời gian chờ. Kiểm tra Internet rồi thử lại.';
+    }
+    if (error is FirebaseException && error.code == 'permission-denied') {
+      return 'Danh sách bài hát chưa được cấp quyền truy cập. Vui lòng thử lại sau.';
+    }
+    if (error is FormatException) {
+      return 'Thông tin bài hát chưa đầy đủ. Vui lòng thử lại sau.';
+    }
+    return 'Chưa tải được danh sách bài hát. Kiểm tra Internet rồi thử lại.';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final songs = _songs;
+    if (!_loading && songs != null) {
+      return widget.readyBuilder?.call(context, songs, _refresh) ??
+          _ReadyMusic(songs: songs, onRefresh: _refresh);
+    }
+    return Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.graphic_eq_rounded,
+                  size: 72,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'DYN MUSIC',
+                  style: Theme.of(context).textTheme.headlineLarge,
+                ),
+                const SizedBox(height: 24),
+                if (_loading) ...[
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 20),
+                  const Text('Đang tải âm nhạc…'),
+                ] else ...[
+                  Text(_error!, textAlign: TextAlign.center),
+                  const SizedBox(height: 20),
+                  FilledButton.icon(
+                    onPressed: _start,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Thử lại'),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
+}
+
+class _ReadyMusic extends StatefulWidget {
+  const _ReadyMusic({required this.songs, required this.onRefresh});
+
+  final List<SongModel> songs;
+  final Future<void> Function() onRefresh;
+
+  @override
+  State<_ReadyMusic> createState() => _ReadyMusicState();
+}
+
+class _ReadyMusicState extends State<_ReadyMusic> {
+  late final AudioService _music;
+  late final PlaylistService _library;
+
+  @override
+  void initState() {
+    super.initState();
+    _music = AudioService()..setSongs(widget.songs);
+    _library = PlaylistService();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ReadyMusic oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(widget.songs, oldWidget.songs)) {
+      _music.setSongs(widget.songs);
+    }
+  }
+
+  @override
+  void dispose() {
+    _music.dispose();
+    _library.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      HomeScreen(music: _music, library: _library, onRefresh: widget.onRefresh);
 }

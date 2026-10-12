@@ -1,5 +1,5 @@
 name: th6_2324801030035
-description: "A new Flutter project."
+description: "Ứng dụng nghe nhạc online với Firebase và just_audio."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -34,6 +34,13 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
+  firebase_core: ^4.15.0
+  cloud_firestore: ^6.10.0
+  just_audio: ^0.10.6
+  firebase_auth: ^6.7.0
+  google_sign_in: ^7.2.0
+  shared_preferences: ^2.5.6
+  url_launcher: ^6.3.3
 
 dev_dependencies:
   flutter_test:
@@ -56,6 +63,9 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  assets:
+    - assets/covers/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

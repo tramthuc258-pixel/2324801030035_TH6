@@ -1,30 +1,35 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// Kiểm tra cơ bản màn hình khởi động của DYN MUSIC.
+// Giả lập kết nối Firebase để test không cần Internet hoặc máy ảo.
+
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
 import 'package:th6_2324801030035/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('DYN MUSIC hiển thị trạng thái tải và lỗi kết nối', (
+    tester,
+  ) async {
+    final connection = Completer<void>();
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
-
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
+    await tester.pumpWidget(
+      MyApp(
+        initializeFirebase: () => connection.future,
+        loadSongs: () async => [],
+      ),
+    );
     await tester.pump();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('DYN MUSIC'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text('Đang tải âm nhạc…'), findsOneWidget);
+
+    connection.completeError(StateError('Giả lập mất kết nối'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.text('Thử lại'), findsOneWidget);
+    expect(find.textContaining('Chưa kết nối được dịch vụ'), findsOneWidget);
   });
 }

@@ -1,0 +1,95 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function owns(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function validSongId(id) {
+      return id is string && id.matches('^[^/]{1,128}$');
+    }
+
+    function validJoinedSongIds(ids) {
+      let joined = ids.join('/');
+      // split returns strings. Exact equality rejects non-strings and slash IDs.
+      return joined.split('/') == ids
+        && joined.matches('[^/]{1,128}(/[^/]{1,128}){0,99}');
+    }
+
+    function validSongIds(ids) {
+      return ids is list
+        && ids.size() <= 100
+        && ids.toSet().size() == ids.size()
+        && (ids.size() == 0 || validJoinedSongIds(ids));
+    }
+
+    function validPlaylist(data) {
+      return data.keys().hasAll(['name', 'songIds', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['name', 'songIds', 'createdAt', 'updatedAt'])
+        && data.name is string
+        && data.name.size() >= 1
+        && data.name.size() <= 60
+        && data.name.matches('.*\\S.*')
+        && validSongIds(data.songIds)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function validUserProfile(data, uid) {
+      return data.keys().hasAll(['uid', 'name', 'email', 'createdAt'])
+        && data.keys().hasOnly(['uid', 'name', 'email', 'createdAt'])
+        && data.uid is string
+        && data.uid == uid
+        && data.name is string
+        && data.name.size() >= 1
+        && data.name.size() <= 60
+        && data.name.matches('.*\\S.*')
+        && data.email is string
+        && data.email.size() >= 3
+        && data.email.size() <= 254
+        && data.email == request.auth.token.email
+        && data.createdAt is timestamp;
+    }
+
+    // The catalogue is public, and only the administrator can change it.
+    match /songs/{songId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /users/{uid} {
+      allow get: if owns(uid);
+      allow list, delete: if false;
+      allow create: if owns(uid)
+        && validUserProfile(request.resource.data, uid)
+        && request.resource.data.createdAt == request.time;
+      allow update: if owns(uid)
+        && validUserProfile(request.resource.data, uid)
+        && request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    match /users/{uid}/favorites/{songId} {
+      allow read, delete: if owns(uid);
+      allow create, update: if owns(uid)
+        && validSongId(songId)
+        && request.resource.data.keys().hasAll(['songId', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['songId', 'createdAt'])
+        && request.resource.data.songId == songId
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.createdAt == request.time;
+    }
+
+    match /users/{uid}/playlists/{playlistId} {
+      allow read, delete: if owns(uid);
+      allow create: if owns(uid)
+        && validPlaylist(request.resource.data)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if owns(uid)
+        && validPlaylist(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedAt == request.time;
+    }
+  }
+}
