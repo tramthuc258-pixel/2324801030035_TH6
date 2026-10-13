@@ -174,14 +174,12 @@ class _AuthFormState extends State<AuthForm> {
                             color: Color(0xFF4285F4),
                           ),
                         )
-                      : const Text(
-                          'G',
-                          semanticsLabel: 'Google',
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFF4285F4),
-                          ),
+                      : Image.asset(
+                          'assets/logo/logo_google.jpg',
+                          width: 24,
+                          height: 24,
+                          fit: BoxFit.contain,
+                          semanticLabel: 'Google',
                         ),
                   label: const Text('Tiếp tục với Google'),
                 ),
